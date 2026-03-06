@@ -1,0 +1,26 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# pnpm via corepack (cleaner than npm -g)
+RUN corepack enable
+
+# Install deps first (cached)
+COPY package.json pnpm-lock.yaml .npmrc* ./
+RUN pnpm install
+
+# Copy prisma schema so prisma generate can run even before mounting code
+COPY prisma ./prisma
+COPY next.config.ts ./next.config.ts
+RUN pnpm prisma generate || true
+
+# In dev we will mount the source code, so no need to COPY . .
+EXPOSE 3000
+
+# Good defaults for Next in Docker (Windows file watching)
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
+
+CMD ["pnpm", "dev"]

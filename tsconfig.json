@@ -25,11 +25,15 @@
   "include": [
     "next-env.d.ts",
     "next-themes.d.ts",
+    "prisma-client.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "src/components/ThemeProvider/index.ts"
+  ]
 }

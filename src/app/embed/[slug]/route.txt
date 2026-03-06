@@ -1,0 +1,12 @@
+// src/app/embed/[slug]/route.ts
+// Sets permissive headers so the embed page can be iframed from any domain.
+// Next.js middleware approach — applies only to /embed/* routes.
+
+import { NextRequest, NextResponse } from "next/server";
+
+export function middleware(req: NextRequest) {
+  const res = NextResponse.next();
+  res.headers.set("X-Frame-Options", "ALLOWALL");
+  res.headers.set("Content-Security-Policy", "frame-ancestors *");
+  return res;
+}

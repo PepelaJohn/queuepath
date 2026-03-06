@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+  
+}
+
+datasource db {
+  provider = "postgresql"
+  
+}
+
+model Founder {
+  id            String        @id @default(cuid())
+  email         String        @unique
+  name          String?
+  passwordHash  String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  waitlists     Waitlist[]
+  subscription  Subscription?
+}
+
+model Waitlist {
+  id              String            @id @default(cuid())
+  founderId       String
+  founder         Founder           @relation(fields: [founderId], references: [id])
+  slug            String            @unique
+  name            String
+  description     String?
+  logoUrl         String?
+  accentColor     String            @default("#6366f1")
+  customCss       String?
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  members         WaitlistMember[]
+}
+
+model WaitlistMember {
+  id            String           @id @default(cuid())
+  waitlistId    String
+  waitlist      Waitlist         @relation(fields: [waitlistId], references: [id])
+  name          String
+  email         String
+  referralCode  String           @unique @default(cuid())
+  referredById  String?
+  referredBy    WaitlistMember?  @relation("Referrals", fields: [referredById], references: [id])
+  referrals     WaitlistMember[] @relation("Referrals")
+  position      Int
+  referralCount Int              @default(0)
+  ipAddress     String?
+  createdAt     DateTime         @default(now())
+
+  @@unique([waitlistId, email])
+  @@index([waitlistId, position])
+}
+
+model ReferralEvent {
+  id           String   @id @default(cuid())
+  referrerId   String
+  refereeId    String
+  waitlistId   String
+  createdAt    DateTime @default(now())
+}
+
+model Subscription {
+  id                String   @id @default(cuid())
+  founderId         String   @unique
+  founder           Founder  @relation(fields: [founderId], references: [id])
+  plan              Plan     @default(FREE)
+  paddleSubId       String?
+  paddleCustomerId  String?
+  status            String   @default("active")
+  currentPeriodEnd  DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+enum Plan {
+  FREE
+  STARTER
+  GROWTH
+  PRO
+}
