@@ -74,14 +74,7 @@ services:
       - /app/node_modules
       # optional but helps Next performance
       - /app/.next
-    develop:
-      watch:
-        - path: .
-          target: /app
-          action: sync
-          ignore:
-            - node_modules/
-            - .next/
+    
 
 volumes:
   postgres_data:
