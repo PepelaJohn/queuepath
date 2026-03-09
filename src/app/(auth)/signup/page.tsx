@@ -3,41 +3,135 @@
 import Link from "next/link";
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
-export default function LoginPage() {
+type Field = "name" | "email" | "password" | "confirm";
+
+interface FieldError {
+  field?: Field;
+  message: string;
+}
+
+function PasswordStrength({ password }: { password: string }) {
+  const checks = [
+    { label: "8+ characters", pass: password.length >= 8 },
+    { label: "Uppercase", pass: /[A-Z]/.test(password) },
+    { label: "Number", pass: /[0-9]/.test(password) },
+  ];
+  const score = checks.filter((c) => c.pass).length;
+  const colors = ["var(--border)", "#e74c3c", "#f5a623", "var(--green)"];
+  const labels = ["", "Weak", "Fair", "Strong"];
+
+  if (!password) return null;
+
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="flex gap-1.5">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-1 flex-1 rounded-full transition-all"
+            style={{ background: i < score ? colors[score] : "var(--border)" }}
+          />
+        ))}
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex gap-3">
+          {checks.map((c) => (
+            <span
+              key={c.label}
+              className="text-xs flex items-center gap-1"
+              style={{ color: c.pass ? "var(--green)" : "var(--muted)" }}
+            >
+              {c.pass ? "✓" : "·"} {c.label}
+            </span>
+          ))}
+        </div>
+        <span className="text-xs font-medium" style={{ color: colors[score] }}>
+          {labels[score]}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export default function SignupPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
-  const urlError = searchParams.get("error");
 
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState(
-    urlError === "CredentialsSignin" ? "Invalid email or password." : ""
-  );
+  const [error, setError] = useState<FieldError | null>(null);
   const [loading, setLoading] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+
+  function focusStyle(e: React.FocusEvent<HTMLInputElement>) {
+    e.currentTarget.style.borderColor = "var(--accent)";
+  }
+  function blurStyle(e: React.FocusEvent<HTMLInputElement>) {
+    e.currentTarget.style.borderColor = "var(--border)";
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
+
+    if (password !== confirm) {
+      setError({ field: "confirm", message: "Passwords do not match." });
+      return;
+    }
+    if (password.length < 8) {
+      setError({ field: "password", message: "Password must be at least 8 characters." });
+      return;
+    }
+    if (!agreed) {
+      setError({ message: "Please accept the Terms of Service to continue." });
+      return;
+    }
+
     setLoading(true);
-    setError("");
 
-    const res = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-      callbackUrl,
-    });
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
 
-    if (res?.error) {
-      setError("Invalid email or password.");
+      const data = await res.json();
+      if (!res.ok) {
+        setError({ message: data.error ?? "Something went wrong." });
+        return;
+      }
+
+      // Auto sign-in after registration
+      const signInRes = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+        callbackUrl: "/dashboard",
+      });
+
+      if (signInRes?.ok) {
+        router.push("/dashboard");
+      } else {
+        router.push("/login?registered=1");
+      }
+    } catch {
+      setError({ message: "Network error. Please try again." });
+    } finally {
       setLoading(false);
-    } else {
-      router.push(callbackUrl);
     }
   }
+
+  const inputBase = {
+    background: "var(--surface-raised)",
+    border: "1px solid var(--border)",
+    color: "var(--text)",
+    fontFamily: "var(--font-body)",
+  };
 
   return (
     <div>
@@ -47,30 +141,54 @@ export default function LoginPage() {
           className="text-xs tracking-[0.22em] uppercase mb-3"
           style={{ color: "var(--accent)", fontFamily: "var(--font-mono)" }}
         >
-          Welcome back
+          Get started — it&apos;s free
         </p>
         <h1
           className="font-display italic leading-none mb-3"
           style={{ fontSize: "clamp(36px, 5vw, 52px)", fontWeight: 300, color: "var(--text)" }}
         >
-          Log in to
+          Create your
           <br />
-          QueuePath.
+          account.
         </h1>
         <p className="text-sm font-light" style={{ color: "var(--muted)" }}>
-          Don&apos;t have an account?{" "}
+          Already have one?{" "}
           <Link
-            href="/signup"
-            className="no-underline font-medium transition-colors hover:underline"
+            href="/login"
+            className="no-underline font-medium hover:underline"
             style={{ color: "var(--accent)" }}
           >
-            Sign up free →
+            Log in →
           </Link>
         </p>
       </div>
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Name */}
+        <div className="space-y-1.5">
+          <label
+            htmlFor="name"
+            className="block text-xs font-medium tracking-wide"
+            style={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}
+          >
+            Full name
+          </label>
+          <input
+            id="name"
+            type="text"
+            autoComplete="name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Jane Smith"
+            className="w-full rounded-xl px-4 py-3.5 text-sm outline-none transition-all"
+            style={inputBase}
+            onFocus={focusStyle}
+            onBlur={blurStyle}
+          />
+        </div>
+
         {/* Email */}
         <div className="space-y-1.5">
           <label
@@ -87,60 +205,47 @@ export default function LoginPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            placeholder="jane@example.com"
             className="w-full rounded-xl px-4 py-3.5 text-sm outline-none transition-all"
             style={{
-              background: "var(--surface-raised)",
-              border: "1px solid var(--border)",
-              color: "var(--text)",
-              fontFamily: "var(--font-body)",
+              ...inputBase,
+              borderColor: error?.field === "email" ? "#e74c3c" : "var(--border)",
             }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+            onFocus={focusStyle}
+            onBlur={blurStyle}
           />
         </div>
 
         {/* Password */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="password"
-              className="block text-xs font-medium tracking-wide"
-              style={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}
-            >
-              Password
-            </label>
-            <Link
-              href="/forgot-password"
-              className="text-xs no-underline hover:underline"
-              style={{ color: "var(--muted)" }}
-            >
-              Forgot password?
-            </Link>
-          </div>
+          <label
+            htmlFor="password"
+            className="block text-xs font-medium tracking-wide"
+            style={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}
+          >
+            Password
+          </label>
           <div className="relative">
             <input
               id="password"
               type={showPassword ? "text" : "password"}
-              autoComplete="current-password"
+              autoComplete="new-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="Min. 8 characters"
               className="w-full rounded-xl px-4 py-3.5 text-sm outline-none transition-all pr-12"
               style={{
-                background: "var(--surface-raised)",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-                fontFamily: "var(--font-body)",
+                ...inputBase,
+                borderColor: error?.field === "password" ? "#e74c3c" : "var(--border)",
               }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+              onFocus={focusStyle}
+              onBlur={blurStyle}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-xs transition-colors"
+              className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors"
               style={{ color: "var(--muted)" }}
             >
               {showPassword ? (
@@ -157,10 +262,84 @@ export default function LoginPage() {
               )}
             </button>
           </div>
+          <PasswordStrength password={password} />
         </div>
 
-        {/* Error */}
-        {error && (
+        {/* Confirm password */}
+        <div className="space-y-1.5">
+          <label
+            htmlFor="confirm"
+            className="block text-xs font-medium tracking-wide"
+            style={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}
+          >
+            Confirm password
+          </label>
+          <input
+            id="confirm"
+            type="password"
+            autoComplete="new-password"
+            required
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder="••••••••"
+            className="w-full rounded-xl px-4 py-3.5 text-sm outline-none transition-all"
+            style={{
+              ...inputBase,
+              borderColor:
+                error?.field === "confirm"
+                  ? "#e74c3c"
+                  : confirm && confirm !== password
+                  ? "#f5a623"
+                  : "var(--border)",
+            }}
+            onFocus={focusStyle}
+            onBlur={blurStyle}
+          />
+          {confirm && confirm !== password && (
+            <p className="text-xs" style={{ color: "#f5a623" }}>Passwords don&apos;t match yet</p>
+          )}
+          {confirm && confirm === password && password.length >= 8 && (
+            <p className="text-xs" style={{ color: "var(--green)" }}>✓ Passwords match</p>
+          )}
+        </div>
+
+        {/* Terms checkbox */}
+        <label className="flex items-start gap-3 cursor-pointer group">
+          <div className="relative mt-0.5">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="sr-only"
+            />
+            <div
+              className="w-4 h-4 rounded flex items-center justify-center transition-all"
+              style={{
+                background: agreed ? "var(--accent)" : "var(--surface-raised)",
+                border: `1px solid ${agreed ? "var(--accent)" : "var(--border)"}`,
+              }}
+            >
+              {agreed && (
+                <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </div>
+          </div>
+          <span className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+            I agree to QueuePath&apos;s{" "}
+            <Link href="/terms" className="no-underline hover:underline" style={{ color: "var(--accent)" }}>
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="no-underline hover:underline" style={{ color: "var(--accent)" }}>
+              Privacy Policy
+            </Link>
+          </span>
+        </label>
+
+        {/* Global error */}
+        {error && !error.field && (
           <div
             className="flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm"
             style={{
@@ -173,7 +352,7 @@ export default function LoginPage() {
               <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
               <path d="M8 5v3M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
-            {error}
+            {error.message}
           </div>
         )}
 
@@ -181,7 +360,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3.5 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-60 mt-2"
+          className="w-full py-3.5 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-60 mt-1"
           style={{
             background: "var(--accent)",
             boxShadow: "0 4px 20px color-mix(in srgb, var(--accent) 30%, transparent)",
@@ -193,10 +372,10 @@ export default function LoginPage() {
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25"/>
                 <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
               </svg>
-              Signing in…
+              Creating your account…
             </span>
           ) : (
-            "Sign in to QueuePath"
+            "Create free account"
           )}
         </button>
       </form>
@@ -208,10 +387,10 @@ export default function LoginPage() {
         <div className="flex-1 h-px" style={{ background: "var(--border)" }} />
       </div>
 
-      {/* Google OAuth placeholder */}
+      {/* Google */}
       <button
         type="button"
-        onClick={() => signIn("google", { callbackUrl })}
+        onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
         className="w-full flex items-center justify-center gap-3 py-3.5 rounded-xl text-sm font-medium transition-all"
         style={{
           background: "var(--surface-raised)",
